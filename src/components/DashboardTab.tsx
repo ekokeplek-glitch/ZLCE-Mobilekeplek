@@ -34,8 +34,14 @@ import {
 } from 'lucide-react';
 import { ParsedSessionState, ValidationResult, TaskStatus, ZLCETask } from '../types/zlce';
 import { copyText } from '../utils/clipboard';
-import { serializeSessionStateToMarkdown } from '../utils/markdownParser';
+import { serializeSessionStateToMarkdown, parseSessionStateMarkdown } from '../utils/markdownParser';
 import { CURRENT_PROJECT_SESSION_STATE_MD } from '../data/templates';
+import { TEAM_MEMBERS } from '../data/teamMembers';
+import { TeamMember } from '../types/mobile';
+import { UseSessionPersistenceReturn } from '../hooks/useSessionPersistence';
+
+export { TEAM_MEMBERS };
+export type { TeamMember };
 
 interface DashboardTabProps {
   stateData: ParsedSessionState;
@@ -45,26 +51,8 @@ interface DashboardTabProps {
   onUpdateStateData: (newData: ParsedSessionState) => void;
   onNavigateTab: (tab: string) => void;
   onRunLinter: () => void;
+  persistence?: UseSessionPersistenceReturn;
 }
-
-export interface TeamMember {
-  id: string;
-  name: string;
-  role: string;
-  email: string;
-  avatarColor: string;
-}
-
-export const TEAM_MEMBERS: TeamMember[] = [
-  { id: 'budi', name: 'Budi', role: 'Frontend & Mobile UI', email: 'budi@zlce.local', avatarColor: 'from-blue-600 to-cyan-500' },
-  { id: 'siti', name: 'Siti', role: 'QA & Test Harness Lead', email: 'siti@zlce.local', avatarColor: 'from-emerald-600 to-teal-500' },
-  { id: 'agus', name: 'Agus', role: 'PWA & Offline Architect', email: 'agus@zlce.local', avatarColor: 'from-amber-600 to-yellow-500' },
-  { id: 'dewi', name: 'Dewi', role: 'Context & Prompt Engineer', email: 'dewi@zlce.local', avatarColor: 'from-purple-600 to-pink-500' },
-  { id: 'eko', name: 'Eko', role: 'System & Git Coordinator', email: 'eko@zlce.local', avatarColor: 'from-indigo-600 to-violet-500' },
-  { id: 'rina', name: 'Rina', role: 'Technical Writer & Docs', email: 'rina@zlce.local', avatarColor: 'from-rose-600 to-red-500' },
-  { id: 'fajar', name: 'Fajar', role: 'Security & Zero-Secret', email: 'fajar@zlce.local', avatarColor: 'from-cyan-600 to-blue-500' },
-  { id: 'hani', name: 'Hani', role: 'Mobile UX & Ergonomics', email: 'hani@zlce.local', avatarColor: 'from-teal-600 to-emerald-500' }
-];
 
 export const TASK_PHASES = [
   { id: 'all', name: 'Semua Task', range: 'TASK-001 s/d TASK-043' },
@@ -86,7 +74,8 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
   onUpdateMarkdown,
   onUpdateStateData,
   onNavigateTab,
-  onRunLinter
+  onRunLinter,
+  persistence
 }) => {
   const [selectedPhase, setSelectedPhase] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -216,7 +205,7 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
             ? (customEvidence || t.evidence !== '-' ? t.evidence : 'Verifikasi terminal sukses 0 error') 
             : t.evidence,
           approved: isNowDone 
-            ? `ya (oleh: ${activeMember.name})` 
+            ? 'ya' 
             : t.approved
         };
       }
@@ -275,18 +264,19 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
     onUpdateMarkdown(newMd);
   };
 
-  // Reset or reload live canonical SESSION_STATE from workspace file
-  const handleReloadLiveSessionState = () => {
-    if (confirm('Muat ulang state dari berkas SESSION_STATE.md kanonik workspace (ZLCE Mobile Workbench v4.0.0)?')) {
-      onUpdateMarkdown(CURRENT_PROJECT_SESSION_STATE_MD);
-      try {
-        const { parseSessionStateMarkdown } = require('../utils/markdownParser');
-        const parsed = parseSessionStateMarkdown(CURRENT_PROJECT_SESSION_STATE_MD);
-        onUpdateStateData(parsed);
-      } catch {
-        // fallback
-        window.location.reload();
+  // Reset or reload live canonical SESSION_STATE directly from physical disk file
+  const handleReloadLiveSessionState = async () => {
+    if (persistence?.reloadFromDisk) {
+      const ok = await persistence.reloadFromDisk();
+      if (ok) {
+        alert('Berhasil disinkronkan langsung dari berkas disk /SESSION_STATE.md repositori!');
+        return;
       }
+    }
+    if (confirm('Muat ulang state dari template kanonik workspace (ZLCE Mobile Workbench v4.0.0)?')) {
+      const parsed = parseSessionStateMarkdown(CURRENT_PROJECT_SESSION_STATE_MD);
+      onUpdateMarkdown(CURRENT_PROJECT_SESSION_STATE_MD);
+      onUpdateStateData(parsed);
     }
   };
 
@@ -398,6 +388,62 @@ Output verifikasi wajib bebas error.`;
               <span>Sinkronkan ke File Repo Asli</span>
             </button>
           </div>
+        </div>
+      </div>
+
+      {/* Real-time Disk Bridge Card (Single Source of Truth) */}
+      <div className={`p-4 rounded-xl border flex flex-col md:flex-row md:items-center justify-between gap-4 transition-all ${
+        persistence?.diskSync?.isSaving
+          ? 'bg-amber-950/30 border-amber-800/60'
+          : persistence?.diskSync?.isLive
+          ? 'bg-emerald-950/20 border-emerald-800/40'
+          : 'bg-slate-900/60 border-slate-800'
+      }`}>
+        <div className="flex items-start sm:items-center gap-3">
+          <div className={`p-2.5 rounded-lg shrink-0 ${
+            persistence?.diskSync?.isLive ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-800 text-slate-400'
+          }`}>
+            <Database className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="font-bold text-sm text-white">Integrasi Berkas Fisik: <code className="text-cyan-300 font-mono">/SESSION_STATE.md</code></span>
+              <span className={`px-2 py-0.5 rounded-full text-[11px] font-mono font-semibold flex items-center gap-1.5 ${
+                persistence?.diskSync?.isSaving
+                  ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                  : persistence?.diskSync?.isLive
+                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                  : 'bg-slate-800 text-slate-400'
+              }`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${persistence?.diskSync?.isLive ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'}`} />
+                {persistence?.diskSync?.isSaving ? 'Menyimpan ke Disk...' : persistence?.diskSync?.isLive ? 'Terhubung & Real-Time' : 'Mode Offline / Local'}
+              </span>
+            </div>
+            <p className="text-xs text-slate-300 mt-1 leading-relaxed">
+              Setiap klaim task, status DONE, langkah WAL, dan serah terima tim <span className="text-emerald-400 font-semibold">langsung ditulis dua arah ke berkas disk repositori</span>. Deteksi perubahan eksternal (Git / Termux / Agen AI) aktif secara otomatis.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 self-end md:self-center shrink-0">
+          <button
+            onClick={() => persistence?.saveToDiskNow && persistence.saveToDiskNow()}
+            disabled={persistence?.diskSync?.isSaving}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-mono bg-cyan-950/60 hover:bg-cyan-900/60 border border-cyan-800/80 text-cyan-200 transition active:scale-95 disabled:opacity-50"
+            title="Tulis paksa markdown antarmuka langsung ke berkas /SESSION_STATE.md"
+          >
+            <Check className="w-3.5 h-3.5 text-cyan-400" />
+            <span>Tulis ke Disk</span>
+          </button>
+          <button
+            onClick={() => persistence?.reloadFromDisk && persistence.reloadFromDisk()}
+            disabled={persistence?.diskSync?.isReading}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-mono bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-200 transition active:scale-95 disabled:opacity-50"
+            title="Muat ulang isi langsung dari berkas fisik /SESSION_STATE.md"
+          >
+            <RotateCcw className={`w-3.5 h-3.5 text-emerald-400 ${persistence?.diskSync?.isReading ? 'animate-spin' : ''}`} />
+            <span>Tarik dari Disk</span>
+          </button>
         </div>
       </div>
 
@@ -965,7 +1011,7 @@ npm test && npm run lint && npm run build
 
               <div className="bg-slate-950 p-3 rounded-lg border border-slate-800 space-y-1 font-mono text-[11px] text-slate-400">
                 <div>Penyetuju (Provenance): <span className="text-white font-bold">{activeMember.name}</span></div>
-                <div>Format tercatat: <span className="text-emerald-400">ya (oleh: {activeMember.name})</span></div>
+                <div>Status Gerbang: <span className="text-emerald-400">ya</span> (Provenance dicatat ke Audit Log &amp; Git)</div>
               </div>
             </div>
 

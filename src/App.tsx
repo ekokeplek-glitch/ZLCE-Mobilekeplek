@@ -163,6 +163,7 @@ export const App: React.FC = () => {
             onUpdateStateData={handleUpdateStateData}
             onNavigateTab={(tab) => setActiveTab(tab as TabType)}
             onRunLinter={handleRunLinter}
+            persistence={persistence}
           />
         )}
 
@@ -175,6 +176,7 @@ export const App: React.FC = () => {
             onUpdateStateData={handleUpdateStateData}
             onRunLinter={handleRunLinter}
             onToggleFullscreen={handleToggleFullscreen}
+            persistence={persistence}
           />
         )}
 

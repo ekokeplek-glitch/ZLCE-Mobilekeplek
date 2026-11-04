@@ -14,10 +14,13 @@ import {
   Undo2,
   Redo2,
   Save,
-  LayoutDashboard
+  LayoutDashboard,
+  Users
 } from 'lucide-react';
 import { TabType, ValidationResult } from '../types/zlce';
 import { TokenUsageGauge } from './TokenUsageGauge';
+import { TEAM_MEMBERS } from '../data/teamMembers';
+import { DiskSyncState } from '../hooks/useSessionPersistence';
 
 interface HeaderProps {
   activeTab: TabType;
@@ -36,6 +39,9 @@ interface HeaderProps {
     lastSaved: Date | null;
     isSaved: boolean;
     hasStoredSession: boolean;
+    diskSync?: DiskSyncState;
+    reloadFromDisk?: () => Promise<boolean>;
+    saveToDiskNow?: () => Promise<boolean>;
   };
 }
 
@@ -48,6 +54,26 @@ export const Header: React.FC<HeaderProps> = ({
   onToggleFullscreen,
   persistence
 }) => {
+  const [activeMemberId, setActiveMemberId] = React.useState<string>(() => {
+    return localStorage.getItem('zlce_active_member_id') || 'eko';
+  });
+
+  React.useEffect(() => {
+    const handleStorage = () => {
+      setActiveMemberId(localStorage.getItem('zlce_active_member_id') || 'eko');
+    };
+    window.addEventListener('storage', handleStorage);
+    const interval = setInterval(handleStorage, 1000);
+    return () => {
+      window.removeEventListener('storage', handleStorage);
+      clearInterval(interval);
+    };
+  }, []);
+
+  const activeMember = React.useMemo(() => {
+    return TEAM_MEMBERS.find(m => m.id === activeMemberId) || TEAM_MEMBERS[0];
+  }, [activeMemberId]);
+
   return (
     <header className="border-b border-slate-800 bg-slate-900/90 backdrop-blur sticky top-0 z-30">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -74,7 +100,20 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
 
           {/* Performance & Quality Indicators */}
-          <div className="flex items-center space-x-2.5">
+          <div className="flex items-center space-x-2 sm:space-x-2.5">
+            {/* Active Tablet Driver (8-Member Relay Team) */}
+            <button
+              onClick={() => setActiveTab('dashboard')}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700/60 text-xs transition active:scale-95"
+              title={`Pemegang Tablet Saat Ini: ${activeMember.name} (${activeMember.role}) - Klik untuk ganti driver di Dashboard`}
+            >
+              <div className={`w-5 h-5 rounded-full bg-gradient-to-tr ${activeMember.avatarColor} flex items-center justify-center text-[10px] font-bold text-white shadow-sm`}>
+                {activeMember.name.slice(0, 1)}
+              </div>
+              <span className="font-semibold text-slate-200 hidden sm:inline">{activeMember.name}</span>
+              <span className="text-[10px] px-1 py-0.2 rounded bg-indigo-500/20 text-indigo-300 font-mono hidden lg:inline">Driver</span>
+            </button>
+
             {/* Live Token Usage Indicator */}
             <TokenUsageGauge rawMarkdown={rawMarkdown} variant="compact" />
 
@@ -96,14 +135,54 @@ export const Header: React.FC<HeaderProps> = ({
             {/* Persistence & Undo/Restore Controls */}
             {persistence && (
               <div className="flex items-center space-x-1 sm:space-x-1.5 pl-1 border-l border-slate-800">
-                {/* Auto-save Status Pill */}
-                <div 
-                  className="hidden md:flex items-center gap-1.5 px-2 py-1 rounded-md bg-slate-950/70 border border-slate-800 text-[11px] font-mono text-slate-400 select-none"
-                  title={persistence.lastSaved ? `Tersimpan di LocalStorage: ${persistence.lastSaved.toLocaleTimeString('id-ID')}` : 'Auto-save aktif'}
-                >
-                  <span className={`w-1.5 h-1.5 rounded-full ${persistence.isSaved ? 'bg-emerald-400' : 'bg-amber-400 animate-ping'}`} />
-                  <span className="hidden lg:inline">{persistence.isSaved ? 'Tersimpan' : 'Menyimpan...'}</span>
-                </div>
+                {/* Auto-save & Live Disk Sync Status Pill */}
+                {persistence.diskSync && (
+                  <div 
+                    className={`hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-[11px] font-mono select-none transition-all ${
+                      persistence.diskSync.isSaving
+                        ? 'bg-amber-950/70 border-amber-600/70 text-amber-300'
+                        : persistence.diskSync.isLive
+                        ? 'bg-emerald-950/60 border-emerald-600/60 text-emerald-300'
+                        : 'bg-slate-950/70 border-slate-800 text-slate-400'
+                    }`}
+                    title={
+                      persistence.diskSync.isSaving
+                        ? 'Sedang menulis langsung ke berkas fisik /SESSION_STATE.md...'
+                        : persistence.diskSync.isLive
+                        ? `Disk Real-Time Aktif (/SESSION_STATE.md) • Terakhir sync: ${persistence.diskSync.lastDiskSync?.toLocaleTimeString('id-ID') || 'live'}`
+                        : `Mode Offline / Local: ${persistence.diskSync.error || 'Disk bridge tidak terhubung'}`
+                    }
+                  >
+                    <span className={`w-2 h-2 rounded-full ${
+                      persistence.diskSync.isSaving
+                        ? 'bg-amber-400 animate-ping'
+                        : persistence.diskSync.isLive
+                        ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]'
+                        : 'bg-slate-500'
+                    }`} />
+                    <span className="hidden lg:inline font-semibold">
+                      {persistence.diskSync.isSaving
+                        ? 'Sync Disk...'
+                        : persistence.diskSync.isLive
+                        ? 'Disk Synced'
+                        : 'Disk Offline'}
+                    </span>
+                    <span className="text-[10px] opacity-75 hidden xl:inline">(/SESSION_STATE.md)</span>
+                  </div>
+                )}
+
+                {/* Force Sync from Disk Button */}
+                {persistence.reloadFromDisk && (
+                  <button
+                    onClick={() => persistence.reloadFromDisk && persistence.reloadFromDisk()}
+                    disabled={persistence.diskSync?.isReading}
+                    className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs font-mono bg-slate-900 border border-slate-700 hover:border-emerald-500/50 hover:bg-slate-800 text-slate-200 transition active:scale-95"
+                    title="Muat ulang status langsung dari berkas disk /SESSION_STATE.md (Single Source of Truth repositori)"
+                  >
+                    <RotateCcw className={`w-3.5 h-3.5 text-emerald-400 ${persistence.diskSync?.isReading ? 'animate-spin' : ''}`} />
+                    <span className="hidden xl:inline text-[11px]">Sync Disk</span>
+                  </button>
+                )}
 
                 {/* Undo Button */}
                 <button

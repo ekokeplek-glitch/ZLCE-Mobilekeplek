@@ -144,3 +144,5 @@ export interface SelfTestScenario {
   sampleAgentResponse: string;
   userNotes?: string;
 }
+
+export * from './mobile';

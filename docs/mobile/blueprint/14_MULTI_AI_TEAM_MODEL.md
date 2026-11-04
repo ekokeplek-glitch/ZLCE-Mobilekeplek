@@ -18,9 +18,17 @@ Sistem membedakan entitas kolaborasi ke dalam 4 tingkatan aktor:
 [ Akun GitHub (Alias) ]   ── menjalankan sesi ──> [ Model AI (Engine) ]
 ```
 
-1. **Anggota Tim (Human Member):**
-   - 8 anggota tim terdaftar dengan nama/alias dan email (misal: `Anggota-1` s.d. `Anggota-8`).
-   - Setiap anggota memiliki wewenang menyetujui Gerbang (Gerbang 1–4) dan mengerjakan task.
+1. **Anggota Tim (Human Member - 8 Anggota Estafet Tablet):**
+   - 8 anggota tim resmi terdaftar dengan alias, peran non-kredensial, dan email:
+     1. `eko`: Eko (Lead / System & Git Coordinator) - `eko.keplek@gmail.com`
+     2. `oned`: Oned (Frontend & Mobile UI Specialist) - `oned@zlce.local`
+     3. `cxperia`: Cxperia (QA & Test Harness Lead) - `cxperia@zlce.local`
+     4. `sulistiyani`: Sulistiyani (PWA & Offline Architect) - `sulistiyani@zlce.local`
+     5. `layang`: Layang (Context & Prompt Engineer) - `layang@zlce.local`
+     6. `acimau`: Acimau (Git & Sync Hub Specialist) - `acimau@zlce.local`
+     7. `kepek`: Kepek (Security & Zero-Secret Officer) - `kepek@zlce.local`
+     8. `gete`: Gete (Mobile UX & Ergonomics Reviewer) - `gete@zlce.local`
+   - Setiap anggota memiliki wewenang penuh menyetujui Gerbang (Gerbang 1–4) dengan pencatatan provenance eksplisit (ADR-07).
 2. **Penyedia & Model AI (AI Provider & Engine):**
    - Berbagai AI coding assistant yang diakses lewat peramban web tablet:
      - Google Gemini (Gemini 1.5 Flash / 1.5 Pro / 2.0 / 3.8 Flash)

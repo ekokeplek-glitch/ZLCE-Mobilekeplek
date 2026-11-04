@@ -24,7 +24,7 @@ import { ParsedSessionState, ValidationResult, TaskStatus, ZLCETask } from '../t
 import { serializeSessionStateToMarkdown, parseSessionStateMarkdown } from '../utils/markdownParser';
 import { TokenUsageGauge } from './TokenUsageGauge';
 import { copyText } from '../utils/clipboard';
-
+import { UseSessionPersistenceReturn } from '../hooks/useSessionPersistence';
 
 interface SessionStateTabProps {
   stateData: ParsedSessionState;
@@ -34,6 +34,7 @@ interface SessionStateTabProps {
   onUpdateStateData: (newData: ParsedSessionState) => void;
   onRunLinter: () => void;
   onToggleFullscreen?: () => void;
+  persistence?: UseSessionPersistenceReturn;
 }
 
 export const SessionStateTab: React.FC<SessionStateTabProps> = ({
@@ -43,7 +44,8 @@ export const SessionStateTab: React.FC<SessionStateTabProps> = ({
   onUpdateMarkdown,
   onUpdateStateData,
   onRunLinter,
-  onToggleFullscreen
+  onToggleFullscreen,
+  persistence
 }) => {
   const [viewMode, setViewMode] = useState<'visual' | 'raw'>('visual');
   const [copied, setCopied] = useState(false);
@@ -300,6 +302,35 @@ export const SessionStateTab: React.FC<SessionStateTabProps> = ({
               <Code className="w-3.5 h-3.5" /> Raw Markdown
             </button>
           </div>
+
+          {/* Real-time Disk Bridge Buttons */}
+          {persistence?.saveToDiskNow && (
+            <button
+              onClick={() => persistence.saveToDiskNow()}
+              disabled={persistence.diskSync?.isSaving}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-mono transition active:scale-95 border ${
+                persistence.diskSync?.isSaving
+                  ? 'bg-amber-950/80 border-amber-700 text-amber-300'
+                  : 'bg-emerald-950/70 hover:bg-emerald-900/80 border-emerald-700/80 text-emerald-300'
+              }`}
+              title="Simpan langsung ke berkas fisik repositori /SESSION_STATE.md"
+            >
+              <Check className={`w-3.5 h-3.5 ${persistence.diskSync?.isSaving ? 'animate-spin' : 'text-emerald-400'}`} />
+              <span>{persistence.diskSync?.isSaving ? 'Menulis Disk...' : 'Tulis ke Disk'}</span>
+            </button>
+          )}
+
+          {persistence?.reloadFromDisk && (
+            <button
+              onClick={() => persistence.reloadFromDisk()}
+              disabled={persistence.diskSync?.isReading}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-mono bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 transition active:scale-95"
+              title="Tarik versi terbaru langsung dari berkas disk /SESSION_STATE.md"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 text-cyan-400 ${persistence.diskSync?.isReading ? 'animate-spin' : ''}`} />
+              <span>Tarik Disk</span>
+            </button>
+          )}
 
           <button
             onClick={handleCopy}
